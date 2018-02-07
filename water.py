@@ -149,7 +149,7 @@ for root, directories, filenames in os.walk(source):
 			"author_name: %%an%%nauthor_email: %%ae%%nauthor_date:%%ai%%n"
 			"committer_name: %%cn%%ncommitter_email: %%ce%%ncommitter_date: %%ci%%n"
 			"EndPatch' -- %s"
-			% (repo,current_file))], stdout=subprocess.PIPE, shell=True)
+			% (repo,current_file[len(source):]))], stdout=subprocess.PIPE, shell=True)
 
 		git_log = list()
 
@@ -307,7 +307,7 @@ if output_csv:
 	data = cursor.execute('''SELECT filename,
 		author_name, author_email, author_date,
 		committer_name, committer_email, committer_date,
-		commit_hash, SUM(number_lines) FROM data GROUP BY commit_hash''')
+		commit_hash, SUM(number_lines) FROM data GROUP BY filename,commit_hash''')
 
 	with open(output_csv,'wb') as outfile:
 		csv_writer = csv.writer(outfile)
