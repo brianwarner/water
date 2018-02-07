@@ -38,8 +38,7 @@ the upstream repo.
 
 To run water, simply type:
 
-```python water.py -r <path to cloned git repo> -s <path to snapshot of
-project> -o outputfile.csv```
+```python water.py -r <path to cloned git repo> -s <path to snapshot of project> -o outputfile.csv```
 
 The resulting CSV can be opened as a spreadsheet.
 
