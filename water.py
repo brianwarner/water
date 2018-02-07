@@ -82,10 +82,10 @@ for opt,arg in opts:
 			repo = arg
 
 	elif opt == '-s':
-		if not os.path.isabs(arg):
-			source = os.path.abspath(arg)
-		else:
+		if os.path.isabs(arg):
 			source = arg
+		else:
+			source = os.path.abspath(arg)+'/'
 
 	elif opt == '-o':
 		output_csv = arg
