@@ -33,7 +33,8 @@ verbose = 0
 obnoxious = 0
 sensitivity = 5
 dump_database = ''
-output_csv = ''
+output_csv = 'water.csv'
+write_csv_header = 1
 
 #### Helper functions ####
 
@@ -47,8 +48,8 @@ def print_usage():
 		"    -S <number>  Adjusts sensitivity. Lines shorter than <number> are not considered for matching.\n"
 		"                  Whitespace lines are always ignored.\n\n"
 		"Optional output arguments:\n"
-		"    -o <file>    Output results as a CSV\n"
-		"    -d <file>    Save the database as a text file\n"
+		"    -o <file>    Specify an alternate filename for the summary CSV\n"
+		"    -d <file>    Use a file instead of an in-memory database\n"
 		"    -v           Increase verbosity\n"
 		"    -V           Obnoxious verbosity\n"
 		"    -h           Print this help message\n\n"
@@ -64,7 +65,9 @@ def print_usage():
 		"    file1\n"
 		"    file2\n"
 		"    directory1/file3\n"
-		"    directory2/file4\n\n")
+		"    directory2/file4\n\n"
+		"Output:\n"
+		"    water.csv    A CSV file in your working directory with the analysis results.\n\n")
 
 #### The real program starts here ####
 
@@ -298,23 +301,33 @@ for root, directories, filenames in os.walk(source):
 			print '\n  Matched lines: %s' % matched
 			print '  Unmatched lines: %s\n' % unmatched
 
-print 'Analysis complete.'
+		if obnoxious:
+			print '  Writing results to %s\n' % output_csv
 
-if output_csv:
+		if write_csv_header:
 
-	print 'Writing results to %s\n' % output_csv
+			with open(output_csv,'w') as outfile:
+				csv_writer = csv.writer(outfile)
 
-	data = cursor.execute('''SELECT filename,
-		author_name, author_email, author_date,
-		committer_name, committer_email, committer_date,
-		commit_hash, SUM(number_lines) FROM data GROUP BY filename,commit_hash''')
+				csv_writer.writerow(['File','Author name','Author email','Author date',
+					'Committer name','Committer email','Committer date',
+					'Commit','Number of lines'])
 
-	with open(output_csv,'wb') as outfile:
-		csv_writer = csv.writer(outfile)
+			write_csv_header = 0
 
-		csv_writer.writerow(['File','Author name','Author email','Author date',
-			'Committer name','Committer email','Committer date',
-			'Commit','Number of lines'])
+		with open(output_csv,'a') as outfile:
+			csv_writer = csv.writer(outfile)
+			data = cursor.execute('''SELECT filename,
+				author_name, author_email, author_date,
+				committer_name, committer_email, committer_date,
+				commit_hash, SUM(number_lines) FROM data GROUP BY filename,commit_hash''')
 
-		csv_writer.writerows(data)
+			csv_writer.writerows(data)
 
+		# Clear out the database for the next file
+
+		cursor.execute("DELETE FROM data")
+
+db_conn.close()
+
+print 'Analysis complete. Results written to %s\n' % output_csv
