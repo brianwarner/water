@@ -30,6 +30,13 @@ Water provides simple, straightforward reports to help upstream contributors
 communicate their impact to downstream consumers who may not realize the extent
 to which they depend upon the work of others.
 
+### Dependencies
+
+Water uses python3.
+
+Water is also compatible with pypy3, which provides a major speed bump if your
+system supports it.
+
 ### How to use it
 
 You should have a release snapshot of the project, as well as a current clone of
@@ -38,7 +45,11 @@ the upstream repo.
 
 To run water, simply type:
 
-```python water.py -r <path to cloned git repo> -s <path to snapshot of project> -o outputfile.csv```
+```./water.py -r <path to cloned git repo> -s <path to snapshot of project> -o outputfile.csv```
+
+Or, if pypy3 is available to you (and definitely check, it's worth it!) you can use:
+
+```pypy3 water.py -r <path to cloned git repo> -s <path to snapshot of project> -o outputfile.csv```
 
 The resulting CSV can be opened as a spreadsheet.
 

@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # encoding = utf8
 
 # Copyright 2018 Brian Warner
@@ -92,20 +92,20 @@ for opt,arg in opts:
 
 	elif opt == '-o':
 		output_csv = arg
-		print 'Option set: results will be written to %s' % arg
+		print('Option set: results will be written to %s' % arg)
 
 	elif opt == '-d':
 		dump_database = arg
-		print 'Option set: database will be dumped to %s' % arg
+		print('Option set: database will be dumped to %s' % arg)
 
 	elif opt == '-v':
 		verbose = 1
-		print 'Option set: verbosity increased'
+		print('Option set: verbosity increased')
 
 	elif opt == '-V':
 		verbose = 1
 		obnoxious = 1
-		print 'Option set: verbosity increased obnoxiously'
+		print('Option set: verbosity increased obnoxiously')
 
 	elif opt == '-h':
 		print_usage()
@@ -129,7 +129,7 @@ cursor.execute('''CREATE TABLE data (filename TEXT,
 	committer_name TEXT, committer_email TEXT, committer_date TEXT,
 	commit_hash TEXT, number_lines INTEGER)''')
 
-print '\nBeginning analysis.'
+print('\nBeginning analysis.')
 
 # Walk through all the files in the source tarball
 
@@ -144,7 +144,7 @@ for root, directories, filenames in os.walk(source):
 		current_file = os.path.join(root,filename)
 
 		if verbose:
-			print '\n Analyzing file: %s' % current_file
+			print('\n Analyzing file: %s' % current_file)
 
 		git_log_raw = subprocess.Popen([("git -C %s log --follow -p -M "
 			"--pretty=format:'"
@@ -152,7 +152,7 @@ for root, directories, filenames in os.walk(source):
 			"author_name: %%an%%nauthor_email: %%ae%%nauthor_date:%%ai%%n"
 			"committer_name: %%cn%%ncommitter_email: %%ce%%ncommitter_date: %%ci%%n"
 			"EndPatch' -- %s"
-			% (repo,current_file[len(source):]))], stdout=subprocess.PIPE, shell=True)
+			% (repo,current_file[len(source):]))], stdout=subprocess.PIPE, shell=True, universal_newlines=True)
 
 		git_log = list()
 
@@ -170,7 +170,7 @@ for root, directories, filenames in os.walk(source):
 		# Walk through the file's log and store history data
 
 		if obnoxious:
-			print '\n   Walking through the git log:'
+			print('\n   Walking through the git log:')
 
 		for line in git_log_raw.stdout.read().split(os.linesep):
 
@@ -193,42 +193,42 @@ for root, directories, filenames in os.walk(source):
 				if line.find('hash: ') == 0:
 					commit_hash = line[7:]
 					if obnoxious:
-						print '    commit_hash: %s' % commit_hash
+						print('    commit_hash: %s' % commit_hash)
 
 				if line.find('author_name:') == 0:
-					author_name = unicode(line[13:].replace("'","\\'"),"utf8","replace")
+					author_name = line[13:].replace("'","\\'")
 					if obnoxious:
-						print '    author_name: %s' % author_name
+						print('    author_name: %s' % author_name)
 					continue
 
 				if line.find('author_email:') == 0:
-					author_email = unicode(line[14:].replace("'","\\'"),"utf8","replace")
+					author_email = line[14:].replace("'","\\'")
 					if obnoxious:
-						print '    author_email: %s' % author_email
+						print('    author_email: %s' % author_email)
 					continue
 
 				if line.find('author_date:') == 0:
 					author_date = line[12:22]
 					if obnoxious:
-						print '    author_date: %s' % author_date
+						print('    author_date: %s' % author_date)
 					continue
 
 				if line.find('committer_name:') == 0:
-					committer_name = unicode(line[16:].replace("'","\\'"),"utf8","replace")
+					committer_name = line[16:].replace("'","\\'")
 					if obnoxious:
-						print '    committer_name: %s' % committer_name
+						print('    committer_name: %s' % committer_name)
 					continue
 
 				if line.find('committer_email:') == 0:
-					committer_email = unicode(line[17:].replace("'","\\'"),"utf8","replace")
+					committer_email = line[17:].replace("'","\\'")
 					if obnoxious:
-						print '    committer_email: %s' % committer_email
+						print('    committer_email: %s' % committer_email)
 					continue
 
 				if line.find('committer_date:') == 0:
 					committer_date = line[16:26]
 					if obnoxious:
-						print '    committer_date: %s' % committer_date
+						print('    committer_date: %s' % committer_date)
 					continue
 
 				# Store additions for comparison. Ignore removals because we
@@ -236,7 +236,7 @@ for root, directories, filenames in os.walk(source):
 
 				if line.find('+') == 0 and len(line[1:].strip()) > 0:
 					if obnoxious:
-						print '    patch line: %s' % line[1:].strip()
+						print('    patch line: %s' % line[1:].strip())
 
 					git_log.append(patchline(commit_hash,author_name,author_email,author_date,
 						committer_name,committer_email,committer_date,
@@ -246,9 +246,11 @@ for root, directories, filenames in os.walk(source):
 		# Now walk through the file and look for matches in the git log
 
 		if obnoxious:
-			print '\n   Walking through the file:'
+			print('\n   Walking through the file:')
 
-		snapshot_file = open(current_file,'r')
+		# We have to open in rb because we may encounter binaries
+
+		snapshot_file = open(current_file,'rb')
 
 		matched = 0 # can probably lose this, it'll be in the database
 		unmatched = 0
@@ -261,14 +263,14 @@ for root, directories, filenames in os.walk(source):
 				continue
 
 			if obnoxious:
-				print '    File line: %s' % fileline.strip()
+				print('    File line: %s' % fileline.strip())
 
 			for git_log_line in git_log:
 
-				if git_log_line.linetext == fileline.strip():
+				if git_log_line.linetext.encode() == fileline.strip():
 
 					if obnoxious:
-						print '    * Matched: %s\n' % git_log_line.linetext
+						print('    * Matched: %s\n' % git_log_line.linetext)
 					matched += 1
 					match_found = 1
 
@@ -298,16 +300,18 @@ for root, directories, filenames in os.walk(source):
 				'N/A',?)''', (current_file,unmatched))
 
 		if verbose:
-			print '\n  Matched lines: %s' % matched
-			print '  Unmatched lines: %s\n' % unmatched
+			print('\n  Matched lines: %s' % matched)
+			print('  Unmatched lines: %s\n' % unmatched)
 
 		if obnoxious:
-			print '  Writing results to %s\n' % output_csv
+			print('  Writing results to %s\n' % output_csv)
 
 		if write_csv_header:
 
 			with open(output_csv,'w') as outfile:
 				csv_writer = csv.writer(outfile)
+
+				outfile.write('\ufeff')
 
 				csv_writer.writerow(['File','Author name','Author email','Author date',
 					'Committer name','Committer email','Committer date',
@@ -315,7 +319,7 @@ for root, directories, filenames in os.walk(source):
 
 			write_csv_header = 0
 
-		with open(output_csv,'a') as outfile:
+		with open(output_csv,'a', newline='', encoding='utf-8') as outfile:
 			csv_writer = csv.writer(outfile)
 			data = cursor.execute('''SELECT filename,
 				author_name, author_email, author_date,
@@ -330,4 +334,4 @@ for root, directories, filenames in os.walk(source):
 
 db_conn.close()
 
-print 'Analysis complete. Results written to %s\n' % output_csv
+print('Analysis complete. Results written to %s\n' % output_csv)
