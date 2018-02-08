@@ -1,5 +1,4 @@
 #!/usr/bin/python3
-# encoding = utf8
 
 # Copyright 2018 Brian Warner
 # https://github.com/brianwarner/water
@@ -127,7 +126,10 @@ cursor = db_conn.cursor()
 cursor.execute('''CREATE TABLE data (filename TEXT,
 	author_name TEXT, author_email TEXT, author_date TEXT,
 	committer_name TEXT, committer_email TEXT, committer_date TEXT,
-	commit_hash TEXT, number_lines INTEGER)''')
+	commit_hash TEXT, number_lines INTEGER,
+	unique(filename, author_name, author_email, author_date,
+	committer_name, committer_email, committer_date, commit_hash)
+	ON CONFLICT IGNORE)''')
 
 print('\nBeginning analysis.')
 
@@ -274,11 +276,23 @@ for root, directories, filenames in os.walk(source):
 					matched += 1
 					match_found = 1
 
-					cursor.execute('''INSERT INTO data (filename,
+					# Brute forcification since sqlite has no 'ON DUPLICATE UPDATE'
+
+					cursor.execute('''INSERT OR IGNORE INTO data (filename,
 						author_name, author_email, author_date,
 						committer_name, committer_email, committer_date,
 						commit_hash, number_lines)
-						VALUES (?,?,?,?,?,?,?,?,1)''',
+						VALUES (?,?,?,?,?,?,?,?,0)''',
+						(current_file,
+						git_log_line.author_name, git_log_line.author_email, git_log_line.author_date,
+						git_log_line.committer_name, git_log_line.committer_email, git_log_line.committer_date,
+						git_log_line.commit_hash))
+
+					cursor.execute('''UPDATE data SET number_lines =
+						number_lines+1 WHERE filename = ? AND
+						author_name = ? AND author_email = ? AND author_date = ? AND
+						committer_name = ? AND committer_email = ? AND committer_date = ? AND
+						commit_hash = ?''',
 						(current_file,
 						git_log_line.author_name, git_log_line.author_email, git_log_line.author_date,
 						git_log_line.committer_name, git_log_line.committer_email, git_log_line.committer_date,
@@ -321,11 +335,8 @@ for root, directories, filenames in os.walk(source):
 
 		with open(output_csv,'a', newline='', encoding='utf-8') as outfile:
 			csv_writer = csv.writer(outfile)
-			data = cursor.execute('''SELECT filename,
-				author_name, author_email, author_date,
-				committer_name, committer_email, committer_date,
-				commit_hash, SUM(number_lines) FROM data GROUP BY filename,commit_hash''')
 
+			data = cursor.execute('''SELECT * from data''')
 			csv_writer.writerows(data)
 
 		# Clear out the database for the next file
