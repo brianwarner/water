@@ -154,7 +154,7 @@ for root, directories, filenames in os.walk(source):
 			"author_name: %%an%%nauthor_email: %%ae%%nauthor_date:%%ai%%n"
 			"committer_name: %%cn%%ncommitter_email: %%ce%%ncommitter_date: %%ci%%n"
 			"EndPatch' -- %s"
-			% (repo,current_file[len(source):]))], stdout=subprocess.PIPE, shell=True, universal_newlines=True)
+			% (repo,current_file[len(source):]))], stdout=subprocess.PIPE, shell=True)
 
 		git_log = list()
 
@@ -174,7 +174,7 @@ for root, directories, filenames in os.walk(source):
 		if obnoxious:
 			print('\n   Walking through the git log:')
 
-		for line in git_log_raw.stdout.read().split(os.linesep):
+		for line in git_log_raw.stdout.read().decode("utf-8", errors='ignore').split(os.linesep):
 
 			if len(line) > 0:
 
