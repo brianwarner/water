@@ -133,12 +133,23 @@ cursor.execute('''CREATE TABLE data (filename TEXT,
 
 print('\nBeginning analysis.')
 
+# Get the total number of files we'll need to consider
+
+if verbose:
+	total_files = sum([len(files) for root, directories, files in os.walk(source)])
+	file_count = 1
+
 # Walk through all the files in the source tarball
 
 for root, directories, filenames in os.walk(source):
 	for filename in filenames:
 
 		if os.path.join(source,'.git') in root:
+
+			if verbose:
+				print('\n Ignoring file (%s of %s): .git directory' % (file_count,total_files))
+				file_count += 1
+
 			continue
 
 		# Get all the commits related to the current file
@@ -146,7 +157,8 @@ for root, directories, filenames in os.walk(source):
 		current_file = os.path.join(root,filename)
 
 		if verbose:
-			print('\n Analyzing file: %s' % current_file)
+			print('\n Analyzing file (%s of %s): %s' % (file_count,total_files,current_file))
+			file_count += 1
 
 		git_log_raw = subprocess.Popen([("git -C %s log --follow -p -M "
 			"--pretty=format:'"
