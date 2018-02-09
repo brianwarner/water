@@ -25,13 +25,13 @@ import time
 import subprocess
 from collections import namedtuple
 import csv
+import datetime
 
 source = ''
 repo = ''
 verbose = 0
 obnoxious = 0
 sensitivity = 5
-dump_database = ''
 output_csv = 'water.csv'
 write_csv_header = 1
 
@@ -48,7 +48,6 @@ def print_usage():
 		"                  Whitespace lines are always ignored.\n\n"
 		"Optional output arguments:\n"
 		"    -o <file>    Specify an alternate filename for the summary CSV\n"
-		"    -d <file>    Use a file instead of an in-memory database\n"
 		"    -v           Increase verbosity\n"
 		"    -V           Obnoxious verbosity\n"
 		"    -h           Print this help message\n\n"
@@ -74,7 +73,7 @@ print ("\nWater (WWTR) is licensed under the Apache License, Version 2.0\n\n"
 	"Copyright 2018 Brian Warner <brian@bdwarner.com>\n"
 	"Get the most recent version from https://github.com/brianwarner/water\n")
 
-opts,args = getopt.getopt(sys.argv[1:],'r:s:o:d:S:vVh')
+opts,args = getopt.getopt(sys.argv[1:],'r:s:o:S:vVh')
 
 for opt,arg in opts:
 	if opt == '-r':
@@ -92,10 +91,6 @@ for opt,arg in opts:
 	elif opt == '-o':
 		output_csv = arg
 		print('Option set: results will be written to %s' % arg)
-
-	elif opt == '-d':
-		dump_database = arg
-		print('Option set: database will be dumped to %s' % arg)
 
 	elif opt == '-v':
 		verbose = 1
@@ -116,11 +111,7 @@ if not source or not repo:
 	print_usage()
 	sys.exit(0)
 
-if dump_database:
-	db_conn = sqlite3.connect(dump_database)
-else:
-	db_conn = sqlite3.connect(':memory:')
-
+db_conn = sqlite3.connect(':memory:')
 cursor = db_conn.cursor()
 
 cursor.execute('''CREATE TABLE data (filename TEXT,
@@ -133,131 +124,39 @@ cursor.execute('''CREATE TABLE data (filename TEXT,
 
 print('\nBeginning analysis.')
 
+start_time=time.time()
+
 # Get the total number of files we'll need to consider
 
 if verbose:
 	total_files = sum([len(files) for root, directories, files in os.walk(source)])
 	file_count = 1
 
-# Walk through all the files in the source tarball
+# Walk through all the files in the snapshot directory
 
 for root, directories, filenames in os.walk(source):
 	for filename in filenames:
+
+		# Check if we're in the .git directory, which should be ignored
 
 		if os.path.join(source,'.git') in root:
 
 			if verbose:
 				print('\n Ignoring file (%s of %s): .git directory' % (file_count,total_files))
 				file_count += 1
-
 			continue
 
-		# Get all the commits related to the current file
+		if filename[-4:] == '.swp':
+
+			if verbose:
+				print('\n Ignoring file (%s of %s): .swp file' % (file_count,total_files))
+				file_count += 1
+			continue
 
 		current_file = os.path.join(root,filename)
 
-		if verbose:
-			print('\n Analyzing file (%s of %s): %s' % (file_count,total_files,current_file))
-			file_count += 1
-
-		git_log_raw = subprocess.Popen([("git -C %s log --follow -p -M "
-			"--pretty=format:'"
-			"hash: %%H%%n"
-			"author_name: %%an%%nauthor_email: %%ae%%nauthor_date:%%ai%%n"
-			"committer_name: %%cn%%ncommitter_email: %%ce%%ncommitter_date: %%ci%%n"
-			"EndPatch' -- %s"
-			% (repo,current_file[len(source):]))], stdout=subprocess.PIPE, shell=True)
-
-		git_log = list()
-
-		patchline = namedtuple('patchline','commit_hash author_name author_email author_date '
-			'committer_name committer_email committer_date '
-			'linetext')
-
-		# Set some defaults, just in case
-
-		author_name = author_email = author_date = '(Unknown)'
-		committer_name = committer_email = committer_date = '(Unknown)'
-
-		linetext = ''
-
-		# Walk through the file's log and store history data
-
-		if obnoxious:
-			print('\n   Walking through the git log:')
-
-		for line in git_log_raw.stdout.read().decode("utf-8", errors='ignore').split(os.linesep):
-
-			if len(line) > 0:
-
-				# Bypass lines we con't need.
-
-				if (line.find('diff --git ') == 0 or
-					line.find('index ') == 0 or
-					line.find('+++ ') == 0 or
-					line.find('--- ') == 0 or
-					line.find('@@ -') == 0 or
-					line.find('rename to ') == 0 or
-					line.find('parents: ') == 0 or
-					line.find('    ') == 0):
-					continue
-
-				# Match header lines
-
-				if line.find('hash: ') == 0:
-					commit_hash = line[7:]
-					if obnoxious:
-						print('    commit_hash: %s' % commit_hash)
-
-				if line.find('author_name:') == 0:
-					author_name = line[13:].replace("'","\\'")
-					if obnoxious:
-						print('    author_name: %s' % author_name)
-					continue
-
-				if line.find('author_email:') == 0:
-					author_email = line[14:].replace("'","\\'")
-					if obnoxious:
-						print('    author_email: %s' % author_email)
-					continue
-
-				if line.find('author_date:') == 0:
-					author_date = line[12:22]
-					if obnoxious:
-						print('    author_date: %s' % author_date)
-					continue
-
-				if line.find('committer_name:') == 0:
-					committer_name = line[16:].replace("'","\\'")
-					if obnoxious:
-						print('    committer_name: %s' % committer_name)
-					continue
-
-				if line.find('committer_email:') == 0:
-					committer_email = line[17:].replace("'","\\'")
-					if obnoxious:
-						print('    committer_email: %s' % committer_email)
-					continue
-
-				if line.find('committer_date:') == 0:
-					committer_date = line[16:26]
-					if obnoxious:
-						print('    committer_date: %s' % committer_date)
-					continue
-
-				# Store additions for comparison. Ignore removals because we
-				# are only finding the last person to modify the line (for now)
-
-				if line.find('+') == 0 and len(line[1:].strip()) > 0:
-					if obnoxious:
-						print('    patch line: %s' % line[1:].strip())
-
-					git_log.append(patchline(commit_hash,author_name,author_email,author_date,
-						committer_name,committer_email,committer_date,
-						line[1:].strip()))
-					continue
-
-		# Now walk through the file and look for matches in the git log
+		matched = 0
+		unmatched = 0
 
 		if obnoxious:
 			print('\n   Walking through the file:')
@@ -266,54 +165,122 @@ for root, directories, filenames in os.walk(source):
 
 		snapshot_file = open(current_file,'rb')
 
-		matched = 0 # can probably lose this, it'll be in the database
-		unmatched = 0
+		for file_line_raw in snapshot_file:
 
-		for fileline in snapshot_file:
+			# Set some safe defaults in case the line isn't matched to the git log
 
-			match_found = 0
+			author_name = author_email = author_date = '(Unknown)'
+			committer_name = committer_email = committer_date = '(Unknown)'
+			commit_hash = ''
 
-			if len(fileline.strip()) < sensitivity:
+			# Escape delimiters and escape characters for a safe Popen
+
+			file_line = file_line_raw.decode("utf-8",errors="ignore").replace("\\","\\\\").replace('"','\\"')
+
+			# Filter out lines which are too short, to reduce false positives
+
+			if len(file_line.strip()) < sensitivity:
 				continue
 
 			if obnoxious:
-				print('    File line: %s' % fileline.strip())
+				print('    File line: %s' % file_line)
 
-			for git_log_line in git_log:
+			# Look for the first patch change which matches the line in the file
 
-				if git_log_line.linetext.encode() == fileline.strip():
+			git_log_command = ('git -C %s log -S"%s" --pretty=format:"'
+				'hash: %%H%%n'
+				'author_name: %%an%%nauthor_email: %%ae%%nauthor_date:%%ai%%n'
+				'committer_name: %%cn%%ncommitter_email: %%ce%%ncommitter_date: %%ci%%n'
+				'EndPatch" -- %s' % ((repo, file_line, current_file[len(source):])))
 
-					if obnoxious:
-						print('    * Matched: %s\n' % git_log_line.linetext)
-					matched += 1
-					match_found = 1
+			git_log_raw = subprocess.Popen([(git_log_command)],
+				stdout=subprocess.PIPE, shell=True)
 
-					# Brute forcification since sqlite has no 'ON DUPLICATE UPDATE'
+			# If we found a match, store metadata from the patch
 
-					cursor.execute('''INSERT OR IGNORE INTO data (filename,
-						author_name, author_email, author_date,
-						committer_name, committer_email, committer_date,
-						commit_hash, number_lines)
-						VALUES (?,?,?,?,?,?,?,?,0)''',
-						(current_file,
-						git_log_line.author_name, git_log_line.author_email, git_log_line.author_date,
-						git_log_line.committer_name, git_log_line.committer_email, git_log_line.committer_date,
-						git_log_line.commit_hash))
+			for line in git_log_raw.stdout.read().decode("utf-8",errors="ignore").split(os.linesep):
 
-					cursor.execute('''UPDATE data SET number_lines =
-						number_lines+1 WHERE filename = ? AND
-						author_name = ? AND author_email = ? AND author_date = ? AND
-						committer_name = ? AND committer_email = ? AND committer_date = ? AND
-						commit_hash = ?''',
-						(current_file,
-						git_log_line.author_name, git_log_line.author_email, git_log_line.author_date,
-						git_log_line.committer_name, git_log_line.committer_email, git_log_line.committer_date,
-						git_log_line.commit_hash))
-
+				if len(line) == 0:
 					continue
 
-			if not match_found:
+				if line.find('hash: ') == 0:
+					commit_hash = line[6:]
+					match_found = 1
+					matched += 1
+					if obnoxious:
+						print('    commit_hash: %s' % commit_hash)
+
+				if line.find('author_name: ') == 0:
+					author_name = line[13:].replace("'","\\'")
+					if obnoxious:
+						print('    author_name: %s' % author_name)
+					continue
+
+				if line.find('author_email: ') == 0:
+					author_email = line[14:].replace("'","\\'")
+					if obnoxious:
+						print('    author_email: %s' % author_email)
+					continue
+
+				if line.find('author_date: ') == 0:
+					author_date = line[12:22]
+					if obnoxious:
+						print('    author_date: %s' % author_date)
+					continue
+
+				if line.find('committer_name: ') == 0:
+					committer_name = line[16:].replace("'","\\'")
+					if obnoxious:
+						print('    committer_name: %s' % committer_name)
+					continue
+
+				if line.find('committer_email: ') == 0:
+					committer_email = line[17:].replace("'","\\'")
+					if obnoxious:
+						print('    committer_email: %s' % committer_email)
+					continue
+
+				if line.find('committer_date: ') == 0:
+					committer_date = line[16:26]
+					if obnoxious:
+						print('    committer_date: %s' % committer_date)
+					continue
+
+			# If a match was found store the info, otherwise move on
+
+			if commit_hash:
+
+				if obnoxious:
+					print('    * Matched: %s\n' % file_line.strip())
+
+				# Brute forcification since sqlite has no 'ON DUPLICATE UPDATE'
+
+				cursor.execute('''INSERT OR IGNORE INTO data (filename,
+					author_name, author_email, author_date,
+					committer_name, committer_email, committer_date,
+					commit_hash, number_lines)
+					VALUES (?,?,?,?,?,?,?,?,0)''',
+					(current_file,
+					author_name, author_email, author_date,
+					committer_name, committer_email, committer_date,
+					commit_hash))
+
+				cursor.execute('''UPDATE data SET number_lines =
+					number_lines+1 WHERE filename = ? AND
+					author_name = ? AND author_email = ? AND author_date = ? AND
+					committer_name = ? AND committer_email = ? AND committer_date = ? AND
+					commit_hash = ?''',
+					(current_file,
+					author_name, author_email, author_date,
+					committer_name, committer_email, committer_date,
+					commit_hash))
+
+				continue
+
+			else:
 				unmatched += 1
+
+		# After finishing the file, store number of unmatched lines (if any)
 
 		if unmatched:
 			cursor.execute(''' INSERT INTO data (filename,
@@ -332,6 +299,8 @@ for root, directories, filenames in os.walk(source):
 		if obnoxious:
 			print('  Writing results to %s\n' % output_csv)
 
+		# Check if we need to write a CSV header, incl. UTF-8 BOM
+
 		if write_csv_header:
 
 			with open(output_csv,'w') as outfile:
@@ -345,6 +314,8 @@ for root, directories, filenames in os.walk(source):
 
 			write_csv_header = 0
 
+		# Write the current file's info to CSV
+
 		with open(output_csv,'a', newline='', encoding='utf-8') as outfile:
 			csv_writer = csv.writer(outfile)
 
@@ -357,4 +328,8 @@ for root, directories, filenames in os.walk(source):
 
 db_conn.close()
 
-print('Analysis complete. Results written to %s\n' % output_csv)
+elapsed_time = time.time() - start_time
+
+print('Analysis completed in %s. Results written to %s\n' %
+(datetime.timedelta(seconds=int(elapsed_time)),output_csv))
+
