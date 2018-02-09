@@ -25,6 +25,7 @@ import time
 import subprocess
 from collections import namedtuple
 import csv
+import datetime
 
 source = ''
 repo = ''
@@ -132,6 +133,8 @@ cursor.execute('''CREATE TABLE data (filename TEXT,
 	ON CONFLICT IGNORE)''')
 
 print('\nBeginning analysis.')
+
+start_time = time.time()
 
 # Get the total number of files we'll need to consider
 
@@ -356,5 +359,8 @@ for root, directories, filenames in os.walk(source):
 		cursor.execute("DELETE FROM data")
 
 db_conn.close()
+elapsed_time = time.time() - start_time
 
-print('Analysis complete. Results written to %s\n' % output_csv)
+print('Analysis completed in %s. Results written to %s\n' %
+(datetime.timedelta(seconds=int(elapsed_time)),output_csv))
+
