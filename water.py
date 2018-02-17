@@ -163,13 +163,15 @@ for root, directories, filenames in os.walk(source):
 			print('\n Analyzing file (%s of %s): %s' % (file_count,total_files,current_file))
 			file_count += 1
 
-		git_log_raw = subprocess.Popen([("git -C %s log --follow -p -M "
+		git_log_command = ("git -C %s log --follow -p -M "
 			"--pretty=format:'"
 			"hash: %%H%%n"
 			"author_name: %%an%%nauthor_email: %%ae%%nauthor_date:%%ai%%n"
 			"committer_name: %%cn%%ncommitter_email: %%ce%%ncommitter_date: %%ci%%n"
 			"EndPatch' -- %s"
-			% (repo,current_file[len(source):]))], stdout=subprocess.PIPE, shell=True)
+			% (repo,current_file[len(source):]))
+
+		git_log_raw = subprocess.Popen([git_log_command], stdout=subprocess.PIPE, shell=True)
 
 		git_log = list()
 
@@ -193,7 +195,7 @@ for root, directories, filenames in os.walk(source):
 
 			if len(line) > 0:
 
-				# Bypass lines we con't need.
+				# Bypass lines we don't need.
 
 				if (line.find('diff --git ') == 0 or
 					line.find('index ') == 0 or
@@ -208,7 +210,7 @@ for root, directories, filenames in os.walk(source):
 				# Match header lines
 
 				if line.find('hash: ') == 0:
-					commit_hash = line[7:]
+					commit_hash = line[6:]
 					if obnoxious:
 						print('    commit_hash: %s' % commit_hash)
 
@@ -259,6 +261,13 @@ for root, directories, filenames in os.walk(source):
 						committer_name,committer_email,committer_date,
 						line[1:].strip()))
 					continue
+
+		# Now reverse the git log so we search in reverse chronological order to
+		# find the first occurance of the intact line. This handles situations
+		# where files were deleted and created, and is necessary because
+		# git log --follow --reverse <file> doesn't seem to follow renames.
+
+		git_log.reverse()
 
 		# Now walk through the file and look for matches in the git log
 
@@ -313,7 +322,7 @@ for root, directories, filenames in os.walk(source):
 						git_log_line.committer_name, git_log_line.committer_email, git_log_line.committer_date,
 						git_log_line.commit_hash))
 
-					continue
+					break
 
 			if not match_found:
 				unmatched += 1
