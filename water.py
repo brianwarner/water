@@ -26,6 +26,7 @@ import subprocess
 from collections import namedtuple
 import csv
 import datetime
+from multiprocessing import Pool
 
 source = ''
 repo = ''
@@ -370,9 +371,16 @@ with open(output_csv,'w') as outfile:
 
 # Walk through all the files in the source tarball
 
+pool = Pool()
+
 for root, directories, filenames in os.walk(source):
 
-	analyze_file(root,filenames)
+	pool.apply_async(analyze_file,(root,filenames))
+
+#	analyze_file(root,filenames)
+
+pool.close()
+pool.join()
 
 elapsed_time = time.time() - start_time
 
