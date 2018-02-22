@@ -70,72 +70,10 @@ def print_usage():
 		"Output:\n"
 		"    water.csv    A CSV file in your working directory with the analysis results.\n\n")
 
-#### The real program starts here ####
+def analyze_file(root,filenames):
 
-print ("\nWater (WWTR) is licensed under the Apache License, Version 2.0\n\n"
-	"Copyright 2018 Brian Warner <brian@bdwarner.com>\n"
-	"Get the most recent version from https://github.com/brianwarner/water\n")
+# This is the core of the analysis, which allows us to use multiprocessing
 
-opts,args = getopt.getopt(sys.argv[1:],'r:s:o:d:iS:vVh')
-
-for opt,arg in opts:
-
-	if opt == '-h':
-		print_usage()
-		sys.exit(0)
-
-	elif opt == '-r':
-		if not os.path.isabs(arg):
-			repo = os.path.abspath(arg)
-		else:
-			repo = arg
-
-	elif opt == '-s':
-		if os.path.isabs(arg):
-			source = arg
-		else:
-			source = os.path.abspath(arg)+'/'
-
-	elif opt == '-o':
-		output_csv = arg
-		print('Option set: results will be written to %s' % arg)
-
-	elif opt == '-v':
-		verbose = 1
-		print('Option set: verbosity increased')
-
-	elif opt == '-V':
-		verbose = 1
-		obnoxious = 1
-		print('Option set: verbosity increased obnoxiously')
-
-	elif opt == '-S':
-		sensitivity = arg
-		print('Option set: changed sensitivity to %s' % arg)
-
-	elif opt == '-i':
-		include_image_files = 1
-		print('Option set: not ignoring common image file formats')
-
-# Make sure we have all the required inputs
-
-if not source or not repo:
-	print_usage()
-	sys.exit(0)
-
-print('\nBeginning analysis.')
-
-start_time = time.time()
-
-# Get the total number of files we'll need to consider
-
-if verbose:
-	total_files = sum([len(files) for root, directories, files in os.walk(source)])
-	file_count = 1
-
-# Walk through all the files in the source tarball
-
-for root, directories, filenames in os.walk(source):
 	for filename in filenames:
 
 		if os.path.join(source,'.git') in root:
@@ -348,19 +286,6 @@ for root, directories, filenames in os.walk(source):
 		if obnoxious:
 			print('  Writing results to %s\n' % output_csv)
 
-		if write_csv_header:
-
-			with open(output_csv,'w') as outfile:
-				csv_writer = csv.writer(outfile)
-
-				outfile.write('\ufeff')
-
-				csv_writer.writerow(['File','Author name','Author email','Author date',
-					'Committer name','Committer email','Committer date',
-					'Commit','Number of lines'])
-
-			write_csv_header = 0
-
 		with open(output_csv,'a', newline='', encoding='utf-8') as outfile:
 			csv_writer = csv.writer(outfile)
 
@@ -368,6 +293,86 @@ for root, directories, filenames in os.walk(source):
 			csv_writer.writerows(data)
 
 		db_conn.close()
+
+#### The real program starts here ####
+
+print ("\nWater (WWTR) is licensed under the Apache License, Version 2.0\n\n"
+	"Copyright 2018 Brian Warner <brian@bdwarner.com>\n"
+	"Get the most recent version from https://github.com/brianwarner/water\n")
+
+opts,args = getopt.getopt(sys.argv[1:],'r:s:o:d:iS:vVh')
+
+for opt,arg in opts:
+
+	if opt == '-h':
+		print_usage()
+		sys.exit(0)
+
+	elif opt == '-r':
+		if not os.path.isabs(arg):
+			repo = os.path.abspath(arg)
+		else:
+			repo = arg
+
+	elif opt == '-s':
+		if os.path.isabs(arg):
+			source = arg
+		else:
+			source = os.path.abspath(arg)+'/'
+
+	elif opt == '-o':
+		output_csv = arg
+		print('Option set: results will be written to %s' % arg)
+
+	elif opt == '-v':
+		verbose = 1
+		print('Option set: verbosity increased')
+
+	elif opt == '-V':
+		verbose = 1
+		obnoxious = 1
+		print('Option set: verbosity increased obnoxiously')
+
+	elif opt == '-S':
+		sensitivity = arg
+		print('Option set: changed sensitivity to %s' % arg)
+
+	elif opt == '-i':
+		include_image_files = 1
+		print('Option set: not ignoring common image file formats')
+
+# Make sure we have all the required inputs
+
+if not source or not repo:
+	print_usage()
+	sys.exit(0)
+
+print('\nBeginning analysis.')
+
+start_time = time.time()
+
+# Get the total number of files we'll need to consider
+
+if verbose:
+	total_files = sum([len(files) for root, directories, files in os.walk(source)])
+	file_count = 1
+
+# Write the header for the output file
+
+with open(output_csv,'w') as outfile:
+	csv_writer = csv.writer(outfile)
+
+	outfile.write('\ufeff')
+
+	csv_writer.writerow(['File','Author name','Author email','Author date',
+		'Committer name','Committer email','Committer date',
+		'Commit','Number of lines'])
+
+# Walk through all the files in the source tarball
+
+for root, directories, filenames in os.walk(source):
+
+	analyze_file(root,filenames)
 
 elapsed_time = time.time() - start_time
 
