@@ -32,9 +32,9 @@ repo = ''
 verbose = 0
 obnoxious = 0
 sensitivity = 5
-dump_database = ''
 output_csv = 'water.csv'
 write_csv_header = 1
+include_image_files = 0
 
 #### Helper functions ####
 
@@ -45,11 +45,12 @@ def print_usage():
 		"    -r <path>    The path to the git repo to be compared against\n"
 		"    -s <path>    The path to the directory containing the snapshot of code to be analyzed\n\n"
 		"Optional analysis arguments:\n"
+		"	 -i           Don't ignore image files, even though they'll probably not be matched properly"
+		"                  (why would you want garbage data?)"
 		"    -S <number>  Adjusts sensitivity. Lines shorter than <number> are not considered for matching.\n"
 		"                  Whitespace lines are always ignored.\n\n"
 		"Optional output arguments:\n"
 		"    -o <file>    Specify an alternate filename for the summary CSV\n"
-		"    -d <file>    Use a file instead of an in-memory database\n"
 		"    -v           Increase verbosity\n"
 		"    -V           Obnoxious verbosity\n"
 		"    -h           Print this help message\n\n"
@@ -75,10 +76,15 @@ print ("\nWater (WWTR) is licensed under the Apache License, Version 2.0\n\n"
 	"Copyright 2018 Brian Warner <brian@bdwarner.com>\n"
 	"Get the most recent version from https://github.com/brianwarner/water\n")
 
-opts,args = getopt.getopt(sys.argv[1:],'r:s:o:d:S:vVh')
+opts,args = getopt.getopt(sys.argv[1:],'r:s:o:d:iS:vVh')
 
 for opt,arg in opts:
-	if opt == '-r':
+
+	if opt == '-h':
+		print_usage()
+		sys.exit(0)
+
+	elif opt == '-r':
 		if not os.path.isabs(arg):
 			repo = os.path.abspath(arg)
 		else:
@@ -94,10 +100,6 @@ for opt,arg in opts:
 		output_csv = arg
 		print('Option set: results will be written to %s' % arg)
 
-	elif opt == '-d':
-		dump_database = arg
-		print('Option set: database will be dumped to %s' % arg)
-
 	elif opt == '-v':
 		verbose = 1
 		print('Option set: verbosity increased')
@@ -107,30 +109,19 @@ for opt,arg in opts:
 		obnoxious = 1
 		print('Option set: verbosity increased obnoxiously')
 
-	elif opt == '-h':
-		print_usage()
-		sys.exit(0)
+	elif opt == '-S':
+		sensitivity = arg
+		print('Option set: changed sensitivity to %s' % arg)
+
+	elif opt == '-i':
+		include_image_files = 1
+		print('Option set: not ignoring common image file formats')
 
 # Make sure we have all the required inputs
 
 if not source or not repo:
 	print_usage()
 	sys.exit(0)
-
-if dump_database:
-	db_conn = sqlite3.connect(dump_database)
-else:
-	db_conn = sqlite3.connect(':memory:')
-
-cursor = db_conn.cursor()
-
-cursor.execute('''CREATE TABLE data (filename TEXT,
-	author_name TEXT, author_email TEXT, author_date TEXT,
-	committer_name TEXT, committer_email TEXT, committer_date TEXT,
-	commit_hash TEXT, number_lines INTEGER,
-	unique(filename, author_name, author_email, author_date,
-	committer_name, committer_email, committer_date, commit_hash)
-	ON CONFLICT IGNORE)''')
 
 print('\nBeginning analysis.')
 
@@ -154,6 +145,19 @@ for root, directories, filenames in os.walk(source):
 				file_count += 1
 
 			continue
+
+		# Set up the in-memory database
+
+		db_conn = sqlite3.connect(':memory:')
+		cursor = db_conn.cursor()
+
+		cursor.execute('''CREATE TABLE data (filename TEXT,
+		author_name TEXT, author_email TEXT, author_date TEXT,
+		committer_name TEXT, committer_email TEXT, committer_date TEXT,
+		commit_hash TEXT, number_lines INTEGER,
+		unique(filename, author_name, author_email, author_date,
+		committer_name, committer_email, committer_date, commit_hash)
+		ON CONFLICT IGNORE)''')
 
 		# Get all the commits related to the current file
 
@@ -363,11 +367,8 @@ for root, directories, filenames in os.walk(source):
 			data = cursor.execute('''SELECT * from data''')
 			csv_writer.writerows(data)
 
-		# Clear out the database for the next file
+		db_conn.close()
 
-		cursor.execute("DELETE FROM data")
-
-db_conn.close()
 elapsed_time = time.time() - start_time
 
 print('Analysis completed in %s. Results written to %s\n' %
