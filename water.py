@@ -28,26 +28,23 @@ import csv
 import datetime
 from multiprocessing import Pool
 
-source = ''
-repo = ''
-verbose = 0
-obnoxious = 0
-sensitivity = 5
-output_csv = 'water.csv'
-write_csv_header = 1
-include_image_files = 0
-
 #### Helper functions ####
 
 def print_usage():
-		print ("\nUsage:\n"
+
+	print ("\nUsage:\n"
 		"  python water.py -r <path to cloned git repo> -s <path to snapshot of project>\n\n"
 		"Required arguments:\n"
 		"    -r <path>    The path to the git repo to be compared against\n"
 		"    -s <path>    The path to the directory containing the snapshot of code to be analyzed\n\n"
+		"File filtering:\n"
+		"  Water attempts to ignore files which will likely bias the output, such as binaries and\n"
+		"  eps files.  You can disable this, but it's probably a really bad idea.\n\n"
+		"  Ignored files and extensions: %s\n\n"
 		"Optional analysis arguments:\n"
-		"	 -i           Don't ignore image files, even though they'll probably not be matched properly"
-		"                  (why would you want garbage data?)"
+		"    -m           Disable multithreading (implied by -v and -V)\n"
+		"    -i           Disable the ignored files list, even though they'll probably not be matched properly\n"
+		"                  THIS OPTION CAN GIVE YOU GARBAGE DATA IF YOU AREN'T CAREFUL\n"
 		"    -S <number>  Adjusts sensitivity. Lines shorter than <number> are not considered for matching.\n"
 		"                  Whitespace lines are always ignored.\n\n"
 		"Optional output arguments:\n"
@@ -69,18 +66,35 @@ def print_usage():
 		"    directory1/file3\n"
 		"    directory2/file4\n\n"
 		"Output:\n"
-		"    water.csv    A CSV file in your working directory with the analysis results.\n\n")
+		"    water.csv    A CSV file in your working directory with the analysis results.\n\n"
+		% str(ignore_files_list)[1:-1])
 
 def analyze_file(root,filenames):
 
 # This is the core of the analysis, which allows us to use multiprocessing
 
+	if verbose:
+		global file_count
+
 	for filename in filenames:
 
-		if os.path.join(source,'.git') in root:
+		# If we're in a .git directory, move on to the next directory
+
+		if root.startswith(os.path.join(source,'.git')):
 
 			if verbose:
-				print('\n Ignoring file (%s of %s): .git directory' % (file_count,total_files))
+				print(' Ignoring %s file(s) from %s: .git directory' % (len(filenames),root))
+				file_count += 1
+
+			break
+
+		# If the file has an ignored extension, move on to the next file
+
+		if ignore_files and filename.endswith(ignore_files_list):
+
+			if verbose:
+				print(' Ignoring file %s (%s of %s): On the ignored files list' %
+					(filename,file_count,total_files))
 				file_count += 1
 
 			continue
@@ -297,93 +311,120 @@ def analyze_file(root,filenames):
 
 #### The real program starts here ####
 
-print ("\nWater (WWTR) is licensed under the Apache License, Version 2.0\n\n"
-	"Copyright 2018 Brian Warner <brian@bdwarner.com>\n"
-	"Get the most recent version from https://github.com/brianwarner/water\n")
+if __name__ == '__main__':
 
-opts,args = getopt.getopt(sys.argv[1:],'r:s:o:d:iS:vVh')
+	source = ''
+	repo = ''
+	multithreaded = True
+	verbose = False
+	obnoxious = False
+	sensitivity = 5
+	output_csv = 'water.csv'
+	write_csv_header = True
+	ignore_files = True
+	ignore_files_list = ('.swp','.bin','.png','.jpg','.gif','.pdf','.eps','.ps','LICENSE')
 
-for opt,arg in opts:
+	print ("\nWater (WWTR) is licensed under the Apache License, Version 2.0\n\n"
+		"Copyright Brian Warner <brian@bdwarner.com>\n"
+		"Get the most recent version from https://github.com/brianwarner/water\n")
 
-	if opt == '-h':
+	opts,args = getopt.getopt(sys.argv[1:],'r:s:o:md:iS:vVh')
+
+	for opt,arg in opts:
+
+		if opt == '-h':
+			print_usage()
+			sys.exit(0)
+
+		elif opt == '-r':
+			if not os.path.isabs(arg):
+				repo = os.path.abspath(arg)
+			else:
+				repo = arg
+
+		elif opt == '-s':
+			if os.path.isabs(arg):
+				source = arg
+			else:
+				source = os.path.abspath(arg)+'/'
+
+		elif opt == '-o':
+			output_csv = arg
+			print('Option set: results will be written to %s' % arg)
+
+		elif opt == '-m':
+			multithreaded = False
+			print('Option set: Multithreading disabled')
+
+		elif opt == '-i':
+			ignore_files = False
+			print('Option set: Disabling ignored files list (YOU HAVE BEEN WARNED)')
+
+		elif opt == '-v':
+			verbose = True
+			multithreaded = False
+			print('Option set: verbosity increased (disables multithreading)')
+
+		elif opt == '-V':
+			verbose = True
+			obnoxious = True
+			multithreaded = False
+			print('Option set: verbosity increased obnoxiously (disables multithreading)')
+
+		elif opt == '-S':
+			sensitivity = arg
+			print('Option set: changed sensitivity to %s' % arg)
+
+		elif opt == '-i':
+			include_image_files = 1
+			print('Option set: not ignoring common image file formats')
+
+	# Make sure we have all the required inputs
+
+	if not source or not repo:
 		print_usage()
 		sys.exit(0)
 
-	elif opt == '-r':
-		if not os.path.isabs(arg):
-			repo = os.path.abspath(arg)
+	print('\nBeginning analysis.')
+
+	start_time = time.time()
+
+	# Get the total number of files we'll need to consider
+
+	if verbose:
+		total_files = sum([len(files) for root, directories, files in os.walk(source)])
+
+		file_count = 1
+
+	# Write the header for the output file
+
+	with open(output_csv,'w') as outfile:
+		csv_writer = csv.writer(outfile)
+
+		outfile.write('\ufeff')
+
+		csv_writer.writerow(['File','Author name','Author email','Author date',
+			'Committer name','Committer email','Committer date',
+			'Commit','Number of lines'])
+
+	# Walk through all the files in the source tarball
+
+	if multithreaded:
+		pool = Pool()
+
+	for root, directories, filenames in os.walk(source):
+
+		if multithreaded:
+			pool.apply_async(analyze_file,(root,filenames))
 		else:
-			repo = arg
+			analyze_file(root,filenames)
 
-	elif opt == '-s':
-		if os.path.isabs(arg):
-			source = arg
-		else:
-			source = os.path.abspath(arg)+'/'
+	if multithreaded:
+		pool.close()
+		pool.join()
 
-	elif opt == '-o':
-		output_csv = arg
-		print('Option set: results will be written to %s' % arg)
+	elapsed_time = time.time() - start_time
 
-	elif opt == '-v':
-		verbose = 1
-		print('Option set: verbosity increased')
-
-	elif opt == '-V':
-		verbose = 1
-		obnoxious = 1
-		print('Option set: verbosity increased obnoxiously')
-
-	elif opt == '-S':
-		sensitivity = arg
-		print('Option set: changed sensitivity to %s' % arg)
-
-	elif opt == '-i':
-		include_image_files = 1
-		print('Option set: not ignoring common image file formats')
-
-# Make sure we have all the required inputs
-
-if not source or not repo:
-	print_usage()
-	sys.exit(0)
-
-print('\nBeginning analysis.')
-
-start_time = time.time()
-
-# Get the total number of files we'll need to consider
-
-if verbose:
-	total_files = sum([len(files) for root, directories, files in os.walk(source)])
-	file_count = 1
-
-# Write the header for the output file
-
-with open(output_csv,'w') as outfile:
-	csv_writer = csv.writer(outfile)
-
-	outfile.write('\ufeff')
-
-	csv_writer.writerow(['File','Author name','Author email','Author date',
-		'Committer name','Committer email','Committer date',
-		'Commit','Number of lines'])
-
-# Walk through all the files in the source tarball
-
-pool = Pool()
-
-for root, directories, filenames in os.walk(source):
-
-	pool.apply_async(analyze_file,(root,filenames))
-
-#	analyze_file(root,filenames)
-
-pool.close()
-pool.join()
-
-elapsed_time = time.time() - start_time
-
-print('Analysis completed in %s. Results written to %s\n' %
-(datetime.timedelta(seconds=int(elapsed_time)),output_csv))
+	print('Analysis completed in %s. Results written to %s\n' %
+	(datetime.timedelta(seconds=int(elapsed_time)),output_csv))
 
